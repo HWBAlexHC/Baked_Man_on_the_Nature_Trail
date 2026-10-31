@@ -100,6 +100,10 @@ class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *a, **kw):
         super().__init__(*a, directory=STATIC, **kw)
 
+    def end_headers(self):
+        self.send_header("Cache-Control", "no-store")  # always serve the latest code while we're editing
+        super().end_headers()
+
     def log_message(self, fmt, *args):
         if "/api/" in (args[0] if args else ""):
             super().log_message(fmt, *args)
