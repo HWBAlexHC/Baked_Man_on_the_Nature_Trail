@@ -224,3 +224,7 @@ function makeTextures(s) {
   mk('altar', 40, 26, g => { R(g, 0x2a2626, 0, 8, 40, 18); R(g, 0x3e3838, 0, 6, 40, 4); R(g, 0xd0d0c0, 4, 0, 3, 7); R(g, 0xff9900, 4, -2, 3, 3); R(g, 0xd0d0c0, 33, 0, 3, 7); R(g, 0x8a0000, 14, 12, 12, 8); });
   mk('firecracker', 10, 6, g => { R(g, 0xd02020, 0, 0, 8, 6); R(g, 0xffd000, 8, 2, 2, 2); });
 }
+
+// Shared text helper: outlined pixel-font text.
+const txt = (s, x, y, str, size = 14, color = '#f5e6c8', extra = {}) =>
+  s.add.text(x, y, str, { fontFamily: FONT, fontSize: size + 'px', color, stroke: '#000', strokeThickness: 3, ...extra });

@@ -1,39 +1,4 @@
 // Baked Man on the Nature Trail: main game.
-const txt = (s, x, y, str, size = 14, color = '#f5e6c8', extra = {}) =>
-  s.add.text(x, y, str, { fontFamily: FONT, fontSize: size + 'px', color, stroke: '#000', strokeThickness: 3, ...extra });
-
-class IntroScene extends Phaser.Scene {
-  constructor() { super('intro'); }
-  create() {
-    makeTextures(this);
-    this.add.rectangle(GW / 2, H / 2, GW, H, 0x0a0605);
-    txt(this, GW / 2, 46, 'BAKED MAN ON THE NATURE TRAIL', 36, '#ff6a1a').setOrigin(0.5);
-    txt(this, GW / 2, 88, 'Something burned is walking the trail tonight. Get out.', 17, '#d9c7a8').setOrigin(0.5);
-    this.add.image(330, 190, 'player').setScale(3.5);
-    this.add.image(GW - 330, 186, 'jason').setScale(3.5);
-    const lines = [
-      'GOAL  Clear all 6 areas of the looping trail, then return to the Trailhead.',
-      '      Its north gate opens and the final chase begins. Survive it to escape.',
-      '',
-      'MOVE  W A S D            SNEAK  hold SHIFT (slow but silent)',
-      'SHOOT Arrow keys         Taser bolts hurt enemies and SLOW the Baked Man',
-      'USE   E  (hide, search, buy, take)',
-      'ITEMS Q firecracker  /  F energy drink  (if you bought them)',
-      '',
-      'HE IS LISTENING. Running, shooting, slamming doors and failed puzzles make noise.',
-      'Watch the AWARENESS bar on the right. You HEAR him before you SEE him.',
-      'If he finds you: run to another area, or hide and hold your breath (SPACE).',
-      'You only lose a heart (of 3) if he actually catches you. Enemies steal coins.',
-      'Each area\'s objective is always shown on the right and at the top of the room.',
-    ];
-    txt(this, 120, 270, lines.join('\n'), 16, '#f5e6c8', { lineSpacing: 6 });
-    const start = txt(this, GW / 2, 630, 'PRESS SPACE OR CLICK TO START', 22, '#ffcc66').setOrigin(0.5);
-    this.tweens.add({ targets: start, alpha: 0.3, duration: 600, yoyo: true, repeat: -1 });
-    const go = () => { SFX.init(); this.scene.start('game'); };
-    this.input.keyboard.once('keydown-SPACE', go);
-    this.input.once('pointerdown', go);
-  }
-}
 
 class GameScene extends Phaser.Scene {
   constructor() { super('game'); }
@@ -48,7 +13,9 @@ class GameScene extends Phaser.Scene {
     this.stepT = 0; this.lastStage = 0; this.periodicT = 20; this.pushT = 0; this.roomTime = 0; this.roomToken = 0;
     this.chatLines = []; this.roomObjs = [];
     this.facing = { x: 1, y: 0 };
-    this.keys = this.input.keyboard.addKeys('W,A,S,D,UP,DOWN,LEFT,RIGHT,SHIFT,E,Q,F,R,SPACE');
+    this.keys = this.input.keyboard.addKeys('W,A,S,D,UP,DOWN,LEFT,RIGHT,SHIFT,E,Q,F,R,SPACE,P,ESC,H,M');
+    this.paused = false;
+    this.time.paused = false; this.tweens.resumeAll(); SFX.resume(); // in case we restarted from the pause menu
 
     this.floorG = this.add.graphics().setDepth(0);
     this.fxG = this.add.graphics().setDepth(6);
@@ -91,6 +58,7 @@ class GameScene extends Phaser.Scene {
     this.mgG = this.add.graphics().setDepth(150);
     this.mgText = txt(this, W / 2, H - 170, '', 17, '#ffffff').setOrigin(0.5).setDepth(151);
     this.buildPanel();
+    this.buildPauseMenu();
 
     this.chat('TRAIL', 'Clear 6 areas to open the Trailhead gate. Ranger Shop is halfway around.', '#9fd3a0');
     this.enterRoom(0, 'start');
@@ -104,6 +72,7 @@ class GameScene extends Phaser.Scene {
     this.panelG = this.add.graphics().setDepth(95);
     const P = (y, s, size, color, extra = {}) => txt(this, x, y, s, size, color, { strokeThickness: 0, ...extra }).setDepth(100);
     P(10, 'BAKED MAN ON THE NATURE TRAIL', 11, '#ff6a1a');
+    txt(this, GW - 12, 36, 'P: pause', 11, '#999080', { strokeThickness: 0 }).setOrigin(1, 0).setDepth(100);
     this.pHearts = P(28, '', 24, '#ff4050');
     this.pStatus = P(60, '', 14, '#ffe060');
     this.pArea = P(84, '', 14, '#f5e6c8', wrap);
@@ -117,6 +86,38 @@ class GameScene extends Phaser.Scene {
     this.pBrainLabel = P(452, '', 11, '#999080');
     this.pBrain = P(466, '', 12, '#ffd0a0', wrap);
     this.pChat = P(H - 8, '', 12, '#ffb08a', { lineSpacing: 2, ...wrap }).setOrigin(0, 1);
+  }
+
+  // ---------- pause menu ----------
+  buildPauseMenu() {
+    const items = [
+      this.add.rectangle(GW / 2, H / 2, GW, H, 0x000000, 0.82),
+      txt(this, GW / 2, 170, 'PAUSED', 48, '#ff6a1a').setOrigin(0.5),
+    ];
+    this.pauseObj = txt(this, GW / 2, 240, '', 15, '#ffe9a0', { align: 'center', wordWrap: { width: 700 } }).setOrigin(0.5, 0);
+    this.pauseMenu = txt(this, GW / 2, 330, '', 22, '#f5e6c8', { align: 'left', lineSpacing: 14 }).setOrigin(0.5, 0);
+    this.pauseItems = [...items, this.pauseObj, this.pauseMenu];
+    this.pauseItems.forEach(o => o.setDepth(400).setVisible(false));
+  }
+  updatePauseMenu() {
+    this.pauseObj.setText(`${this.room.area}: ${this.objective()}`);
+    this.pauseMenu.setText([
+      'P / ESC   Resume',
+      'H         How to play + story',
+      `M         Sound: ${SFX.isMuted() ? 'OFF' : 'ON'}`,
+      'R         Restart run (new trail)',
+    ].join('\n'));
+  }
+  setPaused(on) {
+    this.paused = on;
+    if (on) {
+      this.physics.pause(); this.tweens.pauseAll(); this.time.paused = true; SFX.suspend();
+      this.player.setVelocity(0);
+      this.updatePauseMenu();
+    } else {
+      this.physics.resume(); this.tweens.resumeAll(); this.time.paused = false; SFX.resume();
+    }
+    this.pauseItems.forEach(o => o.setVisible(on));
   }
 
   updatePanel(time) {
@@ -997,6 +998,14 @@ class GameScene extends Phaser.Scene {
     const dt = Math.min(deltaMs / 1000, 0.05);
     const k = this.keys, p = this.player, r = this.run, j = this.jason;
     if (this.over) { if (Phaser.Input.Keyboard.JustDown(k.R)) this.scene.restart(); return; }
+    const JD = Phaser.Input.Keyboard.JustDown;
+    if (JD(k.P) || JD(k.ESC)) this.setPaused(!this.paused);
+    if (this.paused) {
+      if (JD(k.H)) { this.scene.launch('slides', { fromPause: true }); this.scene.pause(); }
+      else if (JD(k.M)) { SFX.setMuted(!SFX.isMuted()); this.updatePauseMenu(); }
+      else if (JD(k.R)) this.scene.restart();
+      return;
+    }
     this.roomTime += dt;
     ['knockT', 'invulnT', 'hitCd', 'shootCd', 'auraT', 'fireCd', 'slowT', 'pushT', 'energyT', 'energyCd', 'noiseFlash', 'sneakHintT'].forEach(n => { this[n] = Math.max(0, this[n] - dt); });
     if (this.knockT <= 0 && !this.hidden) p.setAlpha(this.invulnT > 0 ? 0.6 + Math.sin(time / 60) * 0.3 : 1);
@@ -1262,5 +1271,5 @@ window.game = new Phaser.Game({
   type: Phaser.AUTO, width: GW, height: H, parent: 'game', pixelArt: true, backgroundColor: '#000000',
   physics: { default: 'arcade', arcade: { debug: false } },
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-  scene: [IntroScene, GameScene],
+  scene: [SlidesScene, GameScene],
 });
