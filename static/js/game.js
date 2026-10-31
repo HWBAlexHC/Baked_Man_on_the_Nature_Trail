@@ -321,7 +321,7 @@ class GameScene extends Phaser.Scene {
     [this.walls, this.obst, this.blocks, this.enemies, this.bolts, this.eshots].forEach(g => g.clear(true, true));
     this.roomObjs.forEach(o => o.destroy()); this.roomObjs = [];
     this.hides = []; this.pedestals = []; this.plates = []; this.pumpkins = []; this.searchObjs = [];
-    this.lantern = null; this.trapPed = null; this.fight = null; this.simon = null; this.gateZone = false; this.rightDoorWalls = [];
+    this.lantern = null; this.trapPed = null; this.fight = null; this.simon = null; this.gateZone = false; this.rightDoorWalls = []; this.breaking = null;
   }
 
   drawFloor(color, seed, doors) {
@@ -441,6 +441,11 @@ class GameScene extends Phaser.Scene {
           const spr = this.track(this.add.image(p.x, p.y, 'stump').setScale(S).setDepth(3));
           if (o.searched) spr.setTint(0x555555);
           if (i === room.keyIdx && this.has('trailmap') && !room.cleared) this.tweens.add({ targets: spr, alpha: 0.5, duration: 300, yoyo: true, repeat: -1 });
+          if (!o.searched && !room.cleared) {
+            const q = this.track(txt(this, p.x, p.y - 30, '?', 18, '#ffe060').setOrigin(0.5).setDepth(4));
+            this.tweens.add({ targets: q, y: p.y - 36, duration: 500, yoyo: true, repeat: -1 });
+            o.marker = q;
+          }
           this.searchObjs.push({ x: p.x, y: p.y, spr, o, isKey: i === room.keyIdx });
         });
         break;
@@ -592,7 +597,7 @@ class GameScene extends Phaser.Scene {
     const s = this.jason.sprite, p = this.player;
     const d = Math.hypot(p.x - s.x, p.y - s.y);
     const diff = Phaser.Math.Angle.Wrap(Math.atan2(p.y - s.y, p.x - s.x) - this.jason.facing);
-    return d < 290 && Math.abs(diff) < 0.6 && this.los(s.x, s.y, p.x, p.y);
+    return d < CONE_RANGE && Math.abs(diff) < CONE_HALF_ANGLE && this.los(s.x, s.y, p.x, p.y);
   }
   hide(spot) {
     const j = this.jason;
@@ -668,6 +673,7 @@ class GameScene extends Phaser.Scene {
       sp = Math.min(sp, 192);
     }
     if (j.slowT > 0) sp *= 0.4;
+    if (this.room.type === 'stealth') sp *= STEALTH_JASON_SPEED;
     return sp * ({ chase: 1, distracted: 1, search: 0.7, wander: 0.45, patrol: 0.42, leave: 0.8 }[j.state] || 0);
   }
   spawnJason(side, state) {
@@ -1001,6 +1007,7 @@ class GameScene extends Phaser.Scene {
     if (!this.hidden && this.knockT <= 0) {
       const vx = (k.D.isDown ? 1 : 0) - (k.A.isDown ? 1 : 0), vy = (k.S.isDown ? 1 : 0) - (k.W.isDown ? 1 : 0);
       let sp = this.sneaking ? 95 : 200;
+      if (this.room.type === 'stealth') sp *= STEALTH_PLAYER_SPEED;
       if (this.energyT > 0) sp *= 1.35;
       if (this.slowT > 0) sp *= 0.45;
       if (vx || vy) {
@@ -1044,7 +1051,7 @@ class GameScene extends Phaser.Scene {
     }
 
     this.updateEnemies(dt);
-    this.updateInteractions();
+    this.updateInteractions(dt);
     this.updateRoomLogic(dt);
 
     if (this.finale) {
@@ -1084,7 +1091,7 @@ class GameScene extends Phaser.Scene {
     if (this.periodicT <= 0) { this.periodicT = 28; this.askBrain('periodic'); }
   }
 
-  updateInteractions() {
+  updateInteractions(dt) {
     const p = this.player, k = this.keys, room = this.room;
     const E = Phaser.Input.Keyboard.JustDown(k.E);
     this.promptT.setText('');
@@ -1101,12 +1108,29 @@ class GameScene extends Phaser.Scene {
       const it = ITEMS[ped.st.key];
       action = () => this.buy(ped); label = `E: buy ${it.name} (${it.price}c)\n${it.desc}`; at = ped;
     }
-    for (const so of this.searchObjs) if (near(so) && !so.o.searched && !room.cleared) {
-      action = () => this.searchStump(so); label = 'E: search'; at = so;
+    let stump = null;
+    for (const so of this.searchObjs) if (near(so)) {
+      action = null; at = so;
+      if (room.cleared) label = 'Key already found';
+      else if (so.o.searched) label = 'Already searched';
+      else { label = 'HOLD E to break it open'; stump = so; }
     }
-    if (this.trapPed && near(this.trapPed, 70)) { action = () => this.takeCursed(); label = 'E: take the cursed item'; at = this.trapPed; }
+    if (this.trapPed && near(this.trapPed, 70)) { action = () => this.takeCursed(); label = 'E: take the cursed item'; at = this.trapPed; stump = null; }
     if (at) this.promptT.setText(label).setPosition(at.x, at.y - 36);
     if (E && action) action();
+
+    // Breaking a stump takes a couple of seconds of holding E, and the cracking makes noise.
+    if (stump && k.E.isDown) {
+      if (!this.breaking || this.breaking.so !== stump) this.breaking = { so: stump, t: 0, crackT: 0 };
+      const b = this.breaking;
+      b.t += dt; b.crackT -= dt;
+      if (b.crackT <= 0) { b.crackT = 0.35; SFX.crack(); this.addNoise(1.2); }
+      stump.spr.setX(stump.x + rand(-2, 2));
+      if (b.t >= STUMP_BREAK_TIME) { stump.spr.setX(stump.x); this.breaking = null; this.searchStump(stump); }
+    } else if (this.breaking) {
+      this.breaking.so.spr.setX(this.breaking.so.x);
+      this.breaking = null;
+    }
     if (room.type === 'plates' && !room.cleared && Phaser.Input.Keyboard.JustDown(k.R)) {
       this.blocks.clear(true, true); this.spawnCrates(false);
       this.puzzleFail('You kicked the crates back into place.');
@@ -1125,6 +1149,7 @@ class GameScene extends Phaser.Scene {
   }
   searchStump(so) {
     so.o.searched = true; so.spr.setTint(0x555555);
+    if (so.o.marker) { so.o.marker.destroy(); so.o.marker = null; }
     if (so.isKey) { this.toast('You found the key!'); this.clearCurrent(); }
     else {
       this.puzzleFail('Nothing but ash and bugs.');
@@ -1213,12 +1238,17 @@ class GameScene extends Phaser.Scene {
     if (j.inRoom && j.state === 'patrol') {
       const s = j.sprite;
       g.fillStyle(j.spot > 0 ? 0xff5040 : 0xffdd88, 0.14 + j.spot * 0.25);
-      g.slice(s.x, s.y, 290, j.facing - 0.6, j.facing + 0.6, false); g.fillPath();
+      g.slice(s.x, s.y, CONE_RANGE, j.facing - CONE_HALF_ANGLE, j.facing + CONE_HALF_ANGLE, false); g.fillPath();
     }
     if (j.inRoom && j.state === 'distracted') {
       g.lineStyle(2, 0xffcc33, 0.6); g.strokeCircle(j.distract.x, j.distract.y, 30 + Math.sin(time / 100) * 6);
     }
     // trail map hints
+    if (this.breaking) {
+      const so = this.breaking.so, f = Math.min(1, this.breaking.t / STUMP_BREAK_TIME);
+      g.fillStyle(0x000000, 0.8); g.fillRect(so.x - 32, so.y + 26, 64, 10);
+      g.fillStyle(0xffb040); g.fillRect(so.x - 31, so.y + 27, 62 * f, 8);
+    }
     if (this.has('trailmap')) {
       if (this.simon && !this.simon.playing) { const pk = this.pumpkins[this.room.seq[this.simon.i]]; g.lineStyle(3, 0xffff80, 0.4 + Math.sin(time / 150) * 0.3).strokeCircle(pk.x, pk.y, 44); }
       if (this.room.type === 'plates' && !this.room.cleared) { g.lineStyle(3, 0x80ff90, 0.5); this.plates.forEach(pl => g.strokeRect(pl.x - 28, pl.y - 28, 56, 56)); }

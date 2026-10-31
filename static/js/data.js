@@ -22,6 +22,10 @@ const TYPE_LABEL = {
 const AREAS = ['Trailhead', 'Campsite', 'Cabin Row', 'Lakeshore', 'Ranger Station', 'Pine Hollow', 'Burnt Clearing', 'Smokehouse'];
 const FLOORS = [0x2c3a22, 0x34401f, 0x3b3122, 0x22343c, 0x3a2f22, 0x24301d, 0x3d2a1d, 0x34191a];
 const CHALLENGES = 6;
+const STUMP_BREAK_TIME = 2;      // seconds of holding E to break a stump open
+// Stealth rooms: his vision cone, and how much slower you / faster he is in there.
+const CONE_RANGE = 340, CONE_HALF_ANGLE = 0.8;
+const STEALTH_PLAYER_SPEED = 0.85, STEALTH_JASON_SPEED = 1.15;
 
 const ITEMS = {
   overcharge: { name: 'Overcharged Taser', cat: 'Combat', price: 20, desc: 'Bolts deal +60% damage', short: '+60% bolt dmg' },
@@ -134,7 +138,7 @@ function genRoom(i, type) {
   if (type === 'trap') room.cursedKey = pick(Object.keys(CURSED));
 
   const counts = { exit: 10, shop: 8, fight: 14, plates: 8, search: 10, simon: 8, stealth: 16, trap: 10 };
-  const kinds = i <= 1 ? ['tree', 'tree', 'tent', 'rock'] : i >= 6 ? ['deadtree', 'deadtree', 'rock', 'tree'] : ['tree', 'tree', 'rock', 'stumpblock'];
+  const kinds = i <= 1 ? ['tree', 'tree', 'tent', 'rock'] : i >= 6 ? ['deadtree', 'deadtree', 'rock', 'tree'] : ['tree', 'tree', 'rock', 'rock']; // no stump-looking obstacles: they got confused with searchable stumps
   for (let n = 0; n < counts[type]; n++) {
     const t = takeFree();
     if (t) room.obstacles.push({ ...t, kind: pick(kinds) });

@@ -60,6 +60,7 @@ const SFX = (() => {
       noise(0.12, 160, gain * 0.9, pan, 'lowpass');
       tone(75, 0.14, 'sine', gain * 0.8, pan, 40);
     },
+    crack() { noise(0.08, 1800, 0.12, 0, 'highpass'); tone(180 + Math.random() * 80, 0.06, 'square', 0.03); },
     zap() { tone(1200, 0.07, 'square', 0.03, 0, 300); },
     hit() { noise(0.15, 900, 0.2); tone(140, 0.15, 'square', 0.06, 0, 70); },
     coin() { tone(988, 0.06, 'square', 0.04); setTimeout(() => tone(1319, 0.1, 'square', 0.04), 60); },
