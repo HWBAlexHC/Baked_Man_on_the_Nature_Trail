@@ -53,8 +53,14 @@ const SFX = (() => {
     s.start(t, Math.random() * 0.5); s.stop(t + dur + 0.02);
   }
 
+  let muted = false;
+
   return {
     init,
+    suspend() { if (ctx && ctx.state === 'running') ctx.suspend(); },
+    resume() { if (ctx && ctx.state === 'suspended') ctx.resume(); },
+    setMuted(m) { muted = m; if (master) master.gain.value = m ? 0 : 0.7; },
+    isMuted: () => muted,
     // Heavy boot step. gain 0..1, pan -1 (left) .. 1 (right)
     footstep(gain, pan) {
       noise(0.12, 160, gain * 0.9, pan, 'lowpass');
